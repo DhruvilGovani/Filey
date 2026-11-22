@@ -22,7 +22,7 @@ button,input{font:inherit;color:inherit;border:0;background:none}button{cursor:p
 header{position:absolute;top:10px;left:16px;right:16px;display:flex;justify-content:space-between;z-index:5}
 main{position:absolute;inset:68px 0 92px}
 .view{position:absolute;inset:0;padding:0 16px;opacity:0;transform:scale(.97);pointer-events:none;transition:.5s cubic-bezier(.34,1.3,.64,1);overflow:auto}.view.on{opacity:1;transform:none;pointer-events:auto}
-#home{display:grid;grid-template-rows:25dvh 33dvh 1fr;gap:12px;overflow:hidden}
+#home{display:grid;grid-template-rows:minmax(138px,30%) minmax(150px,40%) minmax(140px,1fr);gap:12px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
 .sc{padding:16px 18px;display:flex;flex-direction:column;justify-content:space-between}
 .sc small,.mut{color:var(--mut)}.big{font-size:26px;font-weight:750;letter-spacing:-.02em}
 .bar{height:14px;border-radius:9px;background:rgba(127,127,127,.22);overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,.18)}
@@ -77,6 +77,9 @@ input[type=range]{accent-color:var(--acc);width:150px}.sm2{width:120px;padding:8
 .wall i{display:none}
 .wall{background:radial-gradient(55% 40% at 8% 6%,color-mix(in srgb,hsl(var(--h) 95% 62%) 60%,var(--bg1)),transparent 70%),radial-gradient(50% 38% at 96% 16%,var(--bg2),transparent 70%),radial-gradient(65% 45% at 78% 96%,var(--bg3),transparent 70%),radial-gradient(48% 36% at 6% 88%,color-mix(in srgb,hsl(calc(var(--h) + 110) 90% 62%) 55%,var(--bg1)),transparent 70%),radial-gradient(40% 30% at 55% 48%,color-mix(in srgb,hsl(calc(var(--h) + 50) 90% 70%) 35%,transparent),transparent 70%),linear-gradient(115deg,transparent 28%,rgba(255,255,255,.16) 40%,transparent 52%),linear-gradient(160deg,var(--bg1),color-mix(in srgb,var(--bg1) 65%,var(--bg2)))}
 .wall::after{content:"";position:absolute;inset:0;opacity:.1;mix-blend-mode:overlay;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.cat{gap:8px;font-size:12px;font-weight:600;min-width:0}.cat span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cat .ic{width:36px;height:36px}
+.rc>div{min-width:0}#browse{padding-bottom:16px}.big{overflow-wrap:anywhere}
+.set{flex-wrap:wrap}.set .in.sm2{width:52%;flex:1 1 140px;min-width:0}.seg button{padding:7px 10px}.donut{width:min(250px,72vw);height:auto;aspect-ratio:1}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition-duration:.01s!important}}
 </style></head><body><div class="wall"><i></i><i></i><i></i></div>
 <div id="app">
@@ -130,12 +133,12 @@ function closeSheet(){$$('.scrim,.sheet').forEach(e=>{e.classList.remove('on');s
 function progress(title,sub,done){const s=document.createElement('div');s.className='scrim on';const m=document.createElement('div');m.className='mod glass';m.innerHTML=`<h3>${title}</h3><small class="mut">${sub}</small><div class="bar"><b id="pf" style="width:0;transition:none"></b></div><small class="mut" id="pp">0%</small>`;$('#app').append(s,m);requestAnimationFrame(()=>m.classList.add('on'));let p=0;const t=setInterval(()=>{p=Math.min(100,p+4+Math.random()*7);$('#pf',m).style.width=p+'%';$('#pp',m).textContent=Math.round(p)+'%';if(p>=100){clearInterval(t);setTimeout(()=>{m.classList.remove('on');s.remove();setTimeout(()=>m.remove(),400);done()},250)}},110)}
 // home
 const CATS=[['img','Images','image'],['vid','Videos','video'],['apk','APKs','apk'],['arc','Archives','archive'],['dl','Downloads','download'],['doc','Documents','doc'],['aud','Audio','audio'],['more','More','more']];
-function home(){$('#cats').innerHTML=CATS.map(([k,l,i])=>`<button class="cat glass tilt c-${k}" data-a="cat" data-c="${k}">${ic(i)}<span>${l}</span></button>`).join('');
+function home(){$('#cats').innerHTML=CATS.map(([k,l,i])=>`<button class="cat tilt c-${k}" data-a="cat" data-c="${k}">${ic(i)}<span>${l}</span></button>`).join('');
 $('#rec').innerHTML=files().sort((a,b)=>b.f.d-a.f.d).slice(0,10).map(x=>{const i=++uid;reg[i]=x;return `<button class="rc glass tilt" data-a="file" data-id="${i}">${fiOf(x.f.n)}<div><b>${E(x.f.n)}</b><small>${rel(x.f.d)}</small></div></button>`}).join('')}
 const sortF=l=>l.sort((a,b)=>S.sort=='date'?b.d-a.d:S.sort=='size'?b.s-a.s:a.n.localeCompare(b.n));
 function browse(){const d=node(cur);$('#crumb').innerHTML=`<button data-a="crumb" data-n="-1">Internal</button>`+cur.map((n,i)=>`${ic('chev')}<button data-a="crumb" data-n="${i}">${E(n)}</button>`).join('')+`<span style="flex:1"></span>${clip?`<button data-a="paste" style="color:var(--acc)">Paste here</button>`:''}<button data-a="mkarc" aria-label="Create archive" style="color:var(--acc)">Compress</button>`;
 const ds=sortF(d.c.filter(x=>x.c&&vis(x.n))),fl=sortF(d.c.filter(x=>!x.c&&vis(x.n)));
-$('#bbody').innerHTML=`<div class="fg">${ds.map(x=>`<button class="fd glass tilt c-fold" data-a="dir" data-n="${E(x.n)}"><span style="color:var(--c)">${ic('folder')}</span><b>${E(x.n)}</b><small>${x.c.length} items</small></button>`).join('')}</div>`+frs(fl.map(y=>({f:y,p:[...cur]})));}
+$('#bbody').innerHTML=ds.map(x=>`<button class="row glass tilt" data-a="dir" data-n="${E(x.n)}"><span class="fi c-fold">${ic('folder')}</span><div class="rt"><b>${E(x.n)}</b><small>${x.c.length} items</small></div>${ic('chev')}</button>`).join('')+(fl.length||!ds.length?frs(fl.map(y=>({f:y,p:[...cur]}))):'');}
 function refresh(){home();browse()}
 // actions
 const A={
