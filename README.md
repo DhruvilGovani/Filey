@@ -1,4 +1,4 @@
-# Glimpse (Filey)
+# Glimpse
 
 A lightweight, glassmorphic mobile file manager built as a single-file web app with native Android bridge support[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span).
 
@@ -16,16 +16,6 @@ Open `index.html` in any mobile browser or visit the live GitHub Pages deploymen
 ### Android APK
 1. Download the latest `app-debug.apk` from the **Releases** tab.
 2. Open the file on your Android device and allow **Install unknown apps** when prompted.
-
-## Native Android Bridge (`window.GlimpseNative`)
-To connect the UI to real device storage (`MANAGE_EXTERNAL_STORAGE`), wrap `index.html` in an Android WebView that exposes `window.GlimpseNative` with the following methods[span_9](start_span)[span_9](end_span):
-- `list(pathArray)` — Returns folder entries (`{ n, dir, s, d }`)[span_10](start_span)[span_10](end_span).
-- `info()` — Returns `{ used, total, breakdown }` storage metrics[span_11](start_span)[span_11](end_span).
-- `open(pathArray, filename)` — Opens a file with the system intent chooser[span_12](start_span)[span_12](end_span).
-- `trash(pathArray, names)` / `rename(pathArray, oldName, newName)`[span_13](start_span)[span_13](end_span)
-- `move(srcPath, names, destPath)` / `copy(srcPath, names, destPath)`[span_14](start_span)[span_14](end_span)
-- `mkdir(pathArray, name)` / `createFile(pathArray, name)`[span_15](start_span)[span_15](end_span)
-- `ftp(action, config)` — Starts or stops the local FTP server (`port`, `user`, `pass`)[span_16](start_span)[span_16](end_span).
 
 ## License
 Open-source under the **MIT License**.
