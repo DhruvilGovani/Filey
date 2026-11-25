@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Environment
 import android.os.StatFs
 import android.provider.MediaStore
+import android.provider.MediaStore.Files.FileColumns
 import android.webkit.JavascriptInterface
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
@@ -57,13 +58,12 @@ class Bridge(private val act: MainActivity) {
         val st = StatFs(root.path); val total = st.totalBytes; val used = total - st.availableBytes
         var img = 0L; var vid = 0L; var arc = 0L; var doc = 0L; var oth = 0L
         try {
-            val c = MediaStore.Files.FileColumns
-            act.contentResolver.query(MediaStore.Files.getContentUri("external"), arrayOf(c.SIZE, c.MEDIA_TYPE, c.MIME_TYPE), null, null, null)?.use {
+            act.contentResolver.query(MediaStore.Files.getContentUri("external"), arrayOf(FileColumns.SIZE, FileColumns.MEDIA_TYPE, FileColumns.MIME_TYPE), null, null, null)?.use {
                 while (it.moveToNext()) {
                     val s = it.getLong(0); val t = it.getInt(1); val m = it.getString(2) ?: ""
                     when {
-                        t == c.MEDIA_TYPE_IMAGE -> img += s
-                        t == c.MEDIA_TYPE_VIDEO -> vid += s
+                        t == FileColumns.MEDIA_TYPE_IMAGE -> img += s
+                        t == FileColumns.MEDIA_TYPE_VIDEO -> vid += s
                         m.contains("zip") || m.contains("rar") || m.contains("7z") || m.contains("tar") -> arc += s
                         m.contains("pdf") || m.contains("word") || m.contains("sheet") || m.contains("presentation") || m.startsWith("text/") -> doc += s
                         else -> oth += s
@@ -133,7 +133,7 @@ class Bridge(private val act: MainActivity) {
                 fs.addListener("default", lf.createListener())
                 val um = PropertiesUserManagerFactory().createUserManager()
                 val u = BaseUser(); u.name = o.optString("user", "admin"); u.password = o.optString("pass", "files123")
-                u.homeDirectory = root.absolutePath; u.authorities = listOf<Authority>(WritePermission()); um.save(u)
+                u.homeDirectory = root.absolutePath; u.setAuthorities(listOf<Authority>(WritePermission())); um.save(u)
                 fs.userManager = um
                 ftp = fs.createServer().also { it.start() }
             }
