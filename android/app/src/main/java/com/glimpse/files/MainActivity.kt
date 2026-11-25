@@ -57,12 +57,13 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(c: Int, p: Array<out String>, r: IntArray) { if (granted()) web.reload() }
 
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-    override fun onBackPressed() { web.evaluateJavascript(BACK) { if (it != "\"h\"") finish() } }
+    override fun onBackPressed() { web.evaluateJavascript(BACK) { if (it != ""h"") finish() } }
 
     companion object {
         // Gives the page the window.GlimpseNative object it expects (promises + arrays) on top of the string-only Java bridge.
         const val SHIM = """(function(){var A=window.GlimpseAndroid,S=JSON.stringify,P=JSON.parse;window.GlimpseNative={
 list:function(p){return Promise.resolve(P(A.list(S(p))))},info:function(){return Promise.resolve(P(A.info()))},
+recent:function(l){return Promise.resolve(P(A.recent(l||15)))},byCategory:function(c){return Promise.resolve(P(A.byCategory(c)))},
 open:function(p,n){A.open(S(p),n)},trash:function(p,n){A.trash(S(p),S(n))},rename:function(p,o,n){A.rename(S(p),o,n)},
 move:function(s,n,d){A.move(S(s),S(n),S(d))},copy:function(s,n,d){A.copy(S(s),S(n),S(d))},
 mkdir:function(p,n){A.mkdir(S(p),n)},createFile:function(p,n){A.createFile(S(p),n)},
