@@ -43,6 +43,16 @@ class Bridge(private val act: MainActivity) {
         return f
     }
 
+    private fun dirSize(d: File, depth: Int = 0): Long {
+        if (depth > 12) return 0L
+        val kids = d.listFiles() ?: return 0L
+        var total = 0L
+        for (k in kids) {
+            total += if (k.isDirectory) dirSize(k, depth + 1) else k.length()
+        }
+        return total
+    }
+
     @JavascriptInterface fun hasAccess(): Boolean = act.granted()
     @JavascriptInterface fun requestAccess() { act.runOnUiThread { act.askAccess() } }
 
@@ -50,17 +60,8 @@ class Bridge(private val act: MainActivity) {
         val a = JSONArray()
         dir(p).listFiles()?.forEach {
             val isDir = it.isDirectory
-            var cnt = 0
-            var size = 0L
-            if (isDir) {
-                val kids = it.listFiles()
-                if (kids != null) {
-                    cnt = kids.size
-                    for (k in kids) if (k.isFile) size += k.length()
-                }
-            } else {
-                size = it.length()
-            }
+            val cnt = if (isDir) (it.listFiles()?.size ?: 0) else 0
+            val size = if (isDir) dirSize(it) else it.length()
             a.put(
                 JSONObject()
                     .put("n", it.name)
