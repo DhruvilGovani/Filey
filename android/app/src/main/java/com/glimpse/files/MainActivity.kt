@@ -57,7 +57,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(c: Int, p: Array<out String>, r: IntArray) { if (granted()) web.reload() }
 
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-    override fun onBackPressed() { web.evaluateJavascript(BACK) { if (it != ""h"") finish() } }
+    override fun onBackPressed() { web.evaluateJavascript(BACK) { if (it != "\"h\"") finish() } }
 
     companion object {
         // Gives the page the window.GlimpseNative object it expects (promises + arrays) on top of the string-only Java bridge.
