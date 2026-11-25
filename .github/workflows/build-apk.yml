@@ -1,20 +1,22 @@
-name: Unzip Repo
+name: Build APK
 on:
-  push:
-    paths: ['Glimpse-repo.zip']
-permissions:
-  contents: write
+  push: { branches: [main] }
+  workflow_dispatch: {}
 jobs:
-  unzip:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          unzip -o Glimpse-repo.zip
-          rm -f Glimpse-repo.zip
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add .
-          git commit -m "Extract Glimpse-repo.zip"
-          git push
-          
+      - name: Copy the web UI into the Android app
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp index.html android/app/src/main/assets/index.html
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.7" }
+      - name: Build debug APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with: { name: Glimpse-debug-apk, path: android/app/build/outputs/apk/debug/*.apk }
