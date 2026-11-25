@@ -61,7 +61,7 @@ class Bridge(private val act: MainActivity) {
         dir(p).listFiles()?.forEach {
             val isDir = it.isDirectory
             val cnt = if (isDir) (it.listFiles()?.size ?: 0) else 0
-            val size = if (isDir) dirSize(it) else it.length()
+            val size = if (isDir) 0L else it.length()
             a.put(
                 JSONObject()
                     .put("n", it.name)
@@ -73,6 +73,21 @@ class Bridge(private val act: MainActivity) {
         }
         a.toString()
     } catch (e: Exception) { "[]" }
+
+    @JavascriptInterface fun calcSizes(p: String) {
+        Thread {
+            try {
+                val res = JSONObject()
+                dir(p).listFiles()?.forEach {
+                    if (it.isDirectory && !it.name.startsWith(".")) {
+                        res.put(it.name, dirSize(it))
+                    }
+                }
+                val js = "window.__onSizes&&window.__onSizes(${JSONObject.quote(p)},$res)"
+                act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+            } catch (_: Exception) {}
+        }.start()
+    }
 
     @JavascriptInterface fun recent(limit: Int): String = try {
         val a = JSONArray()
