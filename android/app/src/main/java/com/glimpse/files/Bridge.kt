@@ -158,9 +158,8 @@ class Bridge(private val act: MainActivity) {
                     .put("d", it.lastModified())
             )
         }
-            a.toString()
-        } catch (e: Exception) { "[]" }
-    }
+        a.toString()
+    } catch (e: Exception) { "[]" }
 
     @JavascriptInterface fun calcSizes(p: String) {
         Thread {
@@ -278,8 +277,9 @@ class Bridge(private val act: MainActivity) {
                 }
             }
         }
-        a.toString()
-    } catch (e: Exception) { "[]" }
+            a.toString()
+        } catch (e: Exception) { "[]" }
+    }
 
     @JavascriptInterface fun byCategory(cat: String): String = try {
         val a = JSONArray()
