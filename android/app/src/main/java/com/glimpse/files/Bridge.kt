@@ -25,9 +25,16 @@ import org.apache.ftpserver.usermanager.impl.BaseUser
 import org.apache.ftpserver.usermanager.impl.WritePermission
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 /** Paths from the page are JSON arrays of folder names under the storage root. Runs on the WebView's JavaBridge thread. */
 class Bridge(private val act: MainActivity) {
@@ -105,7 +112,6 @@ class Bridge(private val act: MainActivity) {
         if (Build.VERSION.SDK_INT >= 26 && hasUsageStatsPermission()) {
             try {
                 val ssm = act.getSystemService(Context.STORAGE_STATS_SERVICE) as StorageStatsManager
-                val user = Process.myUserHandle()
                 val seenUids = HashSet<Int>()
                 var total = 0L
                 for (ai in apps) {
@@ -117,7 +123,6 @@ class Bridge(private val act: MainActivity) {
             } catch (_: Exception) {}
         }
 
-        // Fallback without Usage Access: sum base APKs, split APKs, and external OBB/media folders
         var fallback = 0L
         for (ai in apps) {
             try {
@@ -307,6 +312,124 @@ class Bridge(private val act: MainActivity) {
             try { act.startActivity(Intent.createChooser(i, "Open with").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
             catch (e: Exception) { act.toast("No app can open this file") }
         }
+    }
+
+    // Real Zip inspect: returns JSON array of [{n, s, dir}]
+    @JavascriptInterface fun inspectZip(p: String, n: String): String = try {
+        val f = File(dir(p), n)
+        val arr = JSONArray()
+        if (f.isFile) {
+            ZipInputStream(BufferedInputStream(FileInputStream(f))).use { zis ->
+                var e: ZipEntry? = zis.nextEntry
+                var count = 0
+                while (e != null && count < 500) {
+                    arr.put(
+                        JSONObject()
+                            .put("n", e.name)
+                            .put("s", maxOf(0L, e.size))
+                            .put("dir", e.isDirectory)
+                    )
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                    count++
+                }
+            }
+        }
+        arr.toString()
+    } catch (e: Exception) { "[]" }
+
+    // Real Zip compress: compresses selected names inside folder p into outName (on background thread, notifies __onZipDone)
+    @JavascriptInterface fun zip(p: String, ns: String, outName: String) {
+        Thread {
+            try {
+                val baseDir = dir(p)
+                val targetNames = names(ns).ifEmpty {
+                    baseDir.listFiles()?.map { it.name } ?: emptyList()
+                }
+                val cleanName = if (outName.endsWith(".zip", true)) outName else "$outName.zip"
+                safe(cleanName)
+                val outFile = uniq(baseDir, cleanName)
+                val buf = ByteArray(16384)
+
+                fun addEntry(zos: ZipOutputStream, file: File, relPath: String) {
+                    if (file.canonicalPath == outFile.canonicalPath) return
+                    if (file.isDirectory) {
+                        val entryName = if (relPath.endsWith("/")) relPath else "$relPath/"
+                        zos.putNextEntry(ZipEntry(entryName))
+                        zos.closeEntry()
+                        file.listFiles()?.forEach { child ->
+                            addEntry(zos, child, "$relPath/${child.name}")
+                        }
+                    } else if (file.isFile) {
+                        val ze = ZipEntry(relPath).apply { time = file.lastModified() }
+                        zos.putNextEntry(ze)
+                        BufferedInputStream(FileInputStream(file)).use { bis ->
+                            var len: Int
+                            while (bis.read(buf).also { len = it } > 0) {
+                                zos.write(buf, 0, len)
+                            }
+                        }
+                        zos.closeEntry()
+                    }
+                }
+
+                ZipOutputStream(BufferedOutputStream(FileOutputStream(outFile))).use { zos ->
+                    for (item in targetNames) {
+                        val f = File(baseDir, item)
+                        if (f.exists()) addEntry(zos, f, f.name)
+                    }
+                }
+                val js = "window.__onZipDone&&window.__onZipDone('zip',${JSONObject.quote(p)},${JSONObject.quote(outFile.name)},true)"
+                act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+            } catch (e: Exception) {
+                val js = "window.__onZipDone&&window.__onZipDone('zip',${JSONObject.quote(p)},'',false)"
+                act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+            }
+        }.start()
+    }
+
+    // Real Zip extract: extracts archive n in folder p into destPath (creating subfolder named after archive)
+    @JavascriptInterface fun extractZip(p: String, n: String, destPath: String) {
+        Thread {
+            try {
+                val srcFile = File(dir(p), n)
+                if (!srcFile.isFile) throw IllegalArgumentException("Missing file")
+                val baseDest = dir(destPath).apply { mkdirs() }
+                val folderName = n.substringBeforeLast('.', n).ifEmpty { "Extracted" }
+                val targetDir = uniq(baseDest, folderName).apply { mkdirs() }
+                val targetCanon = targetDir.canonicalPath + File.separator
+                val buf = ByteArray(16384)
+
+                ZipInputStream(BufferedInputStream(FileInputStream(srcFile))).use { zis ->
+                    var e: ZipEntry? = zis.nextEntry
+                    while (e != null) {
+                        val outF = File(targetDir, e.name)
+                        // Zip-slip path traversal guard
+                        if (!outF.canonicalPath.startsWith(targetCanon) && outF.canonicalPath != targetDir.canonicalPath) {
+                            throw SecurityException("Invalid zip entry")
+                        }
+                        if (e.isDirectory) {
+                            outF.mkdirs()
+                        } else {
+                            outF.parentFile?.mkdirs()
+                            BufferedOutputStream(FileOutputStream(outF)).use { bos ->
+                                var len: Int
+                                while (zis.read(buf).also { len = it } > 0) {
+                                    bos.write(buf, 0, len)
+                                }
+                            }
+                        }
+                        zis.closeEntry()
+                        e = zis.nextEntry
+                    }
+                }
+                val js = "window.__onZipDone&&window.__onZipDone('extract',${JSONObject.quote(destPath)},${JSONObject.quote(targetDir.name)},true)"
+                act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+            } catch (e: Exception) {
+                val js = "window.__onZipDone&&window.__onZipDone('extract',${JSONObject.quote(destPath)},'',false)"
+                act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+            }
+        }.start()
     }
 
     @JavascriptInterface fun trash(p: String, ns: String) {

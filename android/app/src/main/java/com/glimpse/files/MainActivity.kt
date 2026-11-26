@@ -65,6 +65,8 @@ class MainActivity : Activity() {
 list:function(p){return Promise.resolve(P(A.list(S(p))))},info:function(){return Promise.resolve(P(A.info()))},
 calcSizes:function(p){A.calcSizes(S(p))},
 recent:function(l){return Promise.resolve(P(A.recent(l||15)))},byCategory:function(c){return Promise.resolve(P(A.byCategory(c)))},
+inspectZip:function(p,n){return Promise.resolve(P(A.inspectZip(S(p),n)))},
+zip:function(p,n,o){A.zip(S(p),S(n),o)},extractZip:function(p,n,d){A.extractZip(S(p),n,S(d))},
 open:function(p,n){A.open(S(p),n)},trash:function(p,n){A.trash(S(p),S(n))},rename:function(p,o,n){A.rename(S(p),o,n)},
 move:function(s,n,d){A.move(S(s),S(n),S(d))},copy:function(s,n,d){A.copy(S(s),S(n),S(d))},
 mkdir:function(p,n){A.mkdir(S(p),n)},createFile:function(p,n){A.createFile(S(p),n)},
