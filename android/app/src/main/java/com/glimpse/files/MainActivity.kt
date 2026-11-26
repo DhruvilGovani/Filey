@@ -38,7 +38,7 @@ class MainActivity : Activity() {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         window.statusBarColor = 0xFF0A1230.toInt(); window.navigationBarColor = 0xFF0A1230.toInt()
-        web = WebView(this); setContentView(web)
+        web = WebView(this); web.setBackgroundColor(0xFF0A1230.toInt()); setContentView(web)
         val loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
         web.settings.apply { javaScriptEnabled = true; domStorageEnabled = true; allowFileAccess = false; allowContentAccess = false }
         val docStart = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)

@@ -120,7 +120,7 @@ const X={jpg:'img',png:'img',webp:'img',mp4:'vid',mkv:'vid',apk:'apk',zip:'arc',
 const cat=n=>X[n.split('.').pop().toLowerCase()]||'oth';
 const CI={img:'image',vid:'video',apk:'apk',arc:'archive',doc:'doc',aud:'audio',oth:'doc'};
 const S={theme:'auto',bl:28,hue:200,hidden:false,sort:'name',bin:14,port:2121,user:'admin',pass:'files123',ext:'Download/Extracted'};
-let bin=[],clip=null,cur=[],ftpOn=false,cache=184,uid=0,reg={},nativeRec=null;
+let bin=[],clip=null,cur=[],ftpOn=false,uid=0,reg={},nativeRec=null;
 const sz=b=>b>=2**30?(b/2**30).toFixed(1)+' GB':b>=MB?(b/MB).toFixed(b>=100*MB?0:1)+' MB':Math.max(1,Math.round(b/1024))+' KB';
 const rel=t=>{const m=(Date.now()-t)/6e4;return m<60?Math.max(1,~~m)+' min ago':m<1440?~~(m/60)+' h ago':~~(m/1440)+' d ago'};
 const node=p=>p.reduce((d,n)=>d.c.find(x=>x.n===n&&x.c),FS);
@@ -197,12 +197,12 @@ function settingsOv(){const sg=(k,o)=>`<div class="seg">${o.map(([v,l])=>`<butto
 push('Settings',`<div class="card glass"><h3>Appearance</h3><div class="set"><span>Theme</span>${sg('theme',[['auto','Auto'],['light','Light'],['dark','Dark']])}</div><div class="set"><span>Glass blur</span><input type="range" min="6" max="44" value="${S.bl}" data-k="bl" aria-label="Glass blur intensity"></div><div class="set"><span>Accent tint</span><span>${[200,265,330,25,150].map(h=>`<button class="sw ${h==S.hue?'on':''}" data-k="hue" data-v="${h}" style="background:hsl(${h} 90% 55%)" aria-label="Accent ${h}"></button>`).join('')}</span></div></div>
 <div class="card glass"><h3>Storage and behavior</h3><div class="set"><span>Show hidden files</span>${tg('hidden')}</div><div class="set"><span>Sort by</span>${sg('sort',[['name','Name'],['date','Date'],['size','Size']])}</div><div class="set"><span>Empty bin after</span>${sg('bin',[[7,'7 d'],[14,'14 d'],[30,'30 d']])}</div></div>
 <div class="card glass"><h3>Power tools and server</h3><div class="set"><span>FTP port</span>${inp('port','number')}</div><div class="set"><span>FTP user</span>${inp('user')}</div><div class="set"><span>FTP password</span>${inp('pass')}</div><div class="set"><span>Extract to</span>${inp('ext')}</div></div>
-<div class="card glass"><h3>About and permissions</h3><div class="set"><span>All files access<br><small class="mut">MANAGE_EXTERNAL_STORAGE</small></span><b style="color:#17b88a">${NB?'Granted':'Demo data'}</b></div><div class="set"><span>Cache<br><small class="mut" id="cs">${cache} MB used</small></span><button class="seg" id="cc" style="padding:9px 14px;font-weight:650;color:var(--acc)">Clean cache</button></div></div>`,o=>{
+<div class="card glass"><h3>About and permissions</h3><div class="set"><span>All files access<br><small class="mut">MANAGE_EXTERNAL_STORAGE</small></span><b style="color:#17b88a">${NB?'Granted':'Demo data'}</b></div></div>`,o=>{
 const set=(k,v)=>{S[k]=isNaN(v)||v===''?v:+v;apply(k=='bl'||k=='hue'||k=='theme')};
 o.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(!b)return;if(b.dataset.t){S[b.dataset.k]=!S[b.dataset.k];b.classList.toggle('on',S[b.dataset.k]);apply();return}
 set(b.dataset.k,b.dataset.v);$$(`[data-k="${b.dataset.k}"]`,o).forEach(x=>x.classList.toggle('on',x==b))});
 o.addEventListener('input',e=>{const k=e.target.dataset.k;if(k&&!e.target.matches('button'))e.target.type=='range'?set(k,e.target.value):S[k]=e.target.value});
-$('#cc',o).onclick=()=>{cache=0;$('#cs',o).textContent='0 MB used';toast('Cache cleaned')}}).classList.add('sl')}
+}).classList.add('sl')}
 function apply(lite){const r=document.documentElement;r.style.setProperty('--bl',S.bl+'px');r.style.setProperty('--h',S.hue);S.theme=='auto'?r.removeAttribute('data-theme'):r.dataset.theme=S.theme;lite||(browse(),home())}
 // parallax tilt
 document.addEventListener('pointermove',e=>{const t=e.target.closest('.tilt');if(!t||e.pointerType=='touch')return;const r=t.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;t.style.setProperty('--ry',x*8+'deg');t.style.setProperty('--rx',-y*8+'deg');t.style.setProperty('--mx',(x+.5)*100+'%');t.style.setProperty('--my',(y+.5)*100+'%')});
