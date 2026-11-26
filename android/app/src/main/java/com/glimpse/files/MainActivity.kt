@@ -39,7 +39,13 @@ class MainActivity : Activity() {
         super.onCreate(b)
         window.statusBarColor = 0xFF0A1230.toInt(); window.navigationBarColor = 0xFF0A1230.toInt()
         web = WebView(this); web.setBackgroundColor(0xFF0A1230.toInt()); setContentView(web)
-        val loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
+        val bridge = Bridge(this)
+        val loader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/thumb/") { path ->
+                bridge.thumbStream(path)?.let { WebResourceResponse("image/jpeg", null, it) }
+            }
+            .build()
         web.settings.apply { javaScriptEnabled = true; domStorageEnabled = true; allowFileAccess = false; allowContentAccess = false }
         val docStart = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         web.webViewClient = object : WebViewClient() {
@@ -47,7 +53,7 @@ class MainActivity : Activity() {
             override fun shouldOverrideUrlLoading(v: WebView, r: WebResourceRequest) = !r.url.toString().startsWith(origin)
             override fun onPageStarted(v: WebView, u: String?, f: android.graphics.Bitmap?) { if (!docStart) v.evaluateJavascript(SHIM, null) }
         }
-        web.addJavascriptInterface(Bridge(this), "GlimpseAndroid")
+        web.addJavascriptInterface(bridge, "GlimpseAndroid")
         if (docStart) WebViewCompat.addDocumentStartJavaScript(web, SHIM, setOf(origin))
         if (!granted()) askAccess()
         web.loadUrl("$origin/assets/index.html")

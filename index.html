@@ -35,7 +35,7 @@ main{position:absolute;inset:68px 0 92px}
 #rec{flex:1;display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 14px;scrollbar-width:none}
 .rc{flex:0 0 calc(50% - 6px);scroll-snap-align:start;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:6px;text-align:left;border-radius:22px}
 .rc b,.rt b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;font-weight:650}.rc small{color:var(--mut)}
-.fi{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 22%,transparent);color:var(--c);flex:none}
+.fi{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 22%,transparent);color:var(--c);flex:none;position:relative;overflow:hidden}.fi img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 .c-img{--c:#17b88a}.c-vid{--c:#f0457f}.c-apk{--c:#7b61ff}.c-arc{--c:#e8960f}.c-dl{--c:#2a8cf0}.c-doc{--c:#9b5de5}.c-aud{--c:#e0509c}.c-oth{--c:#6b7a90}.c-aud{--c:#12a8c4}.c-more{--c:#6b7a90}.c-fold{--c:hsl(var(--h) 85% 48%)}
 #nav{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;padding:6px;border-radius:40px;z-index:6;width:220px}
 #nav .ind{position:absolute;top:6px;bottom:6px;left:6px;width:calc(50% - 6px);border-radius:34px;background:linear-gradient(160deg,rgba(255,255,255,.7),hsl(var(--h) 90% 70% / .45));box-shadow:0 4px 14px hsl(var(--h) 80% 50% / .35),inset 0 1px 0 #fff9;transition:transform .55s cubic-bezier(.34,1.4,.64,1)}
@@ -129,9 +129,10 @@ const vis=n=>S.hidden||!n.startsWith('.');
 function all(d=FS,p=[],o=[]){d.c.forEach(x=>{if(!vis(x.n))return;if(x.c){o.push({f:x,p,dir:1});all(x,[...p,x.n],o)}else o.push({f:x,p})});return o}
 const files=()=>all().filter(x=>!x.dir);
 const thumb=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%360;return `background:linear-gradient(135deg,hsl(${h} 80% 62%),hsl(${h+50} 80% 52%));color:#fff`};
-const fiOf=(n,k=cat(n))=>`<span class="fi c-${k}" ${k=='img'||k=='vid'?`style="${thumb(n)}"`:''}>${ic(CI[k])}</span>`;
+const thumbImg=(n,k,p)=>{if(!NB||!p||(k!=='img'&&k!=='aud'))return'';const rel=[...p,n].map(encodeURIComponent).join('/');return`<img loading="lazy" decoding="async" src="/thumb/${rel}" alt="" onerror="this.remove()">`};
+const fiOf=(n,k=cat(n),p=null)=>`<span class="fi c-${k}" ${k=='img'||k=='vid'?`style="${thumb(n)}"`:''}>${ic(CI[k])}${thumbImg(n,k,p)}</span>`;
 let sel=null,BR=0;const ck=s=>`<span class="ck${s?' on':''}">${ic('check')}</span>`,dots=(i,n)=>`<button class="dots" data-a="more" data-id="${i}" aria-label="Options for ${n}">${ic('more')}</button>`;
-const fr=(x)=>{const i=++uid;reg[i]=x;const y=x.f,s=BR&&sel&&sel.has(y);return `<div class="row glass tilt${s?' sel':''}" role="button" tabindex="0" data-a="file" data-id="${i}">${fiOf(y.n)}<div class="rt"><b>${E(y.n)}</b><small>${sz(y.s)}, ${rel(y.d)}</small></div>${BR&&sel?ck(s):dots(i,E(y.n))}</div>`};
+const fr=(x)=>{const i=++uid;reg[i]=x;const y=x.f,s=BR&&sel&&sel.has(y);return `<div class="row glass tilt${s?' sel':''}" role="button" tabindex="0" data-a="file" data-id="${i}">${fiOf(y.n,undefined,x.p)}<div class="rt"><b>${E(y.n)}</b><small>${sz(y.s)}, ${rel(y.d)}</small></div>${BR&&sel?ck(s):dots(i,E(y.n))}</div>`};
 const frs=l=>l.length?l.map(fr).join(''):'<div class="empty">Nothing here yet.</div>';
 // toast, sheet, modal, overlays
 function toast(t){let e=$('.toast');e?.remove();e=document.createElement('div');e.className='toast glass';e.textContent=t;$('#app').append(e);requestAnimationFrame(()=>e.classList.add('on'));setTimeout(()=>{e.classList.remove('on');setTimeout(()=>e.remove(),400)},2400)}
@@ -144,7 +145,7 @@ function progress(title,sub,done){const s=document.createElement('div');s.classN
 const CATS=[['img','Images','image'],['vid','Videos','video'],['apk','APKs','apk'],['arc','Archives','archive'],['dl','Downloads','download'],['doc','Documents','doc'],['aud','Audio','audio'],['more','More','more']];
 function home(){$('#cats').innerHTML=CATS.map(([k,l,i])=>`<button class="cat tilt c-${k}" data-a="cat" data-c="${k}">${ic(i)}<span>${l}</span></button>`).join('');
 const recList=(NB&&nativeRec)?nativeRec.map(r=>({f:{n:r.n,s:r.s,d:r.d},p:r.p})):files().sort((a,b)=>b.f.d-a.f.d).slice(0,12);
-$('#rec').innerHTML=recList.length?recList.map(x=>{const i=++uid;reg[i]=x;return `<button class="rc glass tilt" data-a="file" data-id="${i}">${fiOf(x.f.n)}<div><b>${E(x.f.n)}</b><small>${rel(x.f.d)}</small></div></button>`}).join(''):'<div class="empty" style="padding:18px;width:100%">No recent files found.</div>'}
+$('#rec').innerHTML=recList.length?recList.map(x=>{const i=++uid;reg[i]=x;return `<button class="rc glass tilt" data-a="file" data-id="${i}">${fiOf(x.f.n,undefined,x.p)}<div><b>${E(x.f.n)}</b><small>${rel(x.f.d)}</small></div></button>`}).join(''):'<div class="empty" style="padding:18px;width:100%">No recent files found.</div>'}
 const sortF=l=>l.sort((a,b)=>S.sort=='date'?b.d-a.d:S.sort=='size'?b.s-a.s:a.n.localeCompare(b.n));
 function browse(){const d=node(cur);$('#crumb').innerHTML=`<button data-a="crumb" data-n="-1">Internal</button>`+cur.map((n,i)=>`${ic('chev')}<button data-a="crumb" data-n="${i}">${E(n)}</button>`).join('')+`<span style="flex:1"></span>${clip?`<button data-a="paste" style="color:var(--acc)">Paste here</button>`:''}<button data-a="mkarc" aria-label="Create archive" style="color:var(--acc)">Compress</button>`;
 const ds=sortF(d.c.filter(x=>x.c&&vis(x.n))),fl=sortF(d.c.filter(x=>!x.c&&vis(x.n)));

@@ -26,11 +26,18 @@ import org.apache.ftpserver.usermanager.impl.BaseUser
 import org.apache.ftpserver.usermanager.impl.WritePermission
 import org.json.JSONArray
 import org.json.JSONObject
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import android.util.LruCache
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.zip.ZipEntry
@@ -42,6 +49,81 @@ class Bridge(private val act: MainActivity) {
     private val root: File = Environment.getExternalStorageDirectory()
     private val trashDir = File(root, ".glimpse_trash")
     private var ftp: FtpServer? = null
+    private val thumbCache = object : LruCache<String, ByteArray>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+
+    private fun toThumbJpeg(decodeFn: (BitmapFactory.Options) -> Bitmap?): ByteArray? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        decodeFn(bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / sample > 256 && bounds.outHeight / sample > 256) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        val raw = decodeFn(opts) ?: return null
+        val size = 96
+        val minSide = minOf(raw.width, raw.height).coerceAtLeast(1)
+        val x = (raw.width - minSide) / 2
+        val y = (raw.height - minSide) / 2
+        val cropped = if (raw.width == raw.height) raw else Bitmap.createBitmap(raw, x, y, minSide, minSide)
+        if (cropped !== raw) raw.recycle()
+        val scaled = if (cropped.width == size) cropped else Bitmap.createScaledBitmap(cropped, size, size, true)
+        if (scaled !== cropped) cropped.recycle()
+        val out = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 78, out)
+        scaled.recycle()
+        return out.toByteArray()
+    }
+
+    fun thumbStream(relPath: String): InputStream? {
+        return try {
+            val clean = relPath.trimStart('/')
+            if (clean.isEmpty()) return null
+            val parts = clean.split('/')
+            if (parts.any { it == ".." || it == "." || it.isEmpty() }) return null
+            val f = File(root, clean)
+            if (!f.isFile) return null
+            val rootCanon = root.canonicalPath + File.separator
+            val fileCanon = f.canonicalPath
+            if (!fileCanon.startsWith(rootCanon)) return null
+
+            val key = "$fileCanon|${f.lastModified()}"
+            thumbCache.get(key)?.let { return ByteArrayInputStream(it) }
+
+            val ext = f.extension.lowercase()
+            val bytes: ByteArray? = when (ext) {
+                "jpg", "jpeg", "png", "webp", "gif", "heic", "bmp" -> {
+                    toThumbJpeg { opts -> BitmapFactory.decodeFile(f.absolutePath, opts) }
+                }
+                "mp3", "flac", "m4a", "wav", "ogg", "aac", "opus" -> {
+                    val mmr = MediaMetadataRetriever()
+                    val pic: ByteArray? = try {
+                        mmr.setDataSource(f.absolutePath)
+                        mmr.embeddedPicture
+                    } catch (_: Exception) {
+                        null
+                    } finally {
+                        try { mmr.release() } catch (_: Exception) {}
+                    }
+                    if (pic != null && pic.isNotEmpty()) {
+                        toThumbJpeg { opts -> BitmapFactory.decodeByteArray(pic, 0, pic.size, opts) }
+                    } else null
+                }
+                else -> null
+            }
+            if (bytes != null && bytes.isNotEmpty()) {
+                thumbCache.put(key, bytes)
+                ByteArrayInputStream(bytes)
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     private fun safe(n: String) = require(n.isNotEmpty() && n != ".." && n != "." && !n.contains('/')) { "bad name" }
     private fun dir(p: String): File {
