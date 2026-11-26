@@ -158,8 +158,9 @@ class Bridge(private val act: MainActivity) {
                     .put("d", it.lastModified())
             )
         }
-        a.toString()
-    } catch (e: Exception) { "[]" }
+            a.toString()
+        } catch (e: Exception) { "[]" }
+    }
 
     @JavascriptInterface fun calcSizes(p: String) {
         Thread {
@@ -206,7 +207,8 @@ class Bridge(private val act: MainActivity) {
         a.toString()
     } catch (e: Exception) { "[]" }
 
-    @JavascriptInterface fun search(query: String, showHidden: Boolean): String = try {
+    @JavascriptInterface fun search(query: String, showHidden: Boolean): String {
+        return try {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return "[]"
         val a = JSONArray()
@@ -564,7 +566,8 @@ class Bridge(private val act: MainActivity) {
         idx.writeText(arr.toString())
     }
 
-    @JavascriptInterface fun listTrash(maxDays: Int): String = try {
+    @JavascriptInterface fun listTrash(maxDays: Int): String {
+        return try {
         val idx = File(trashDir, "index.json")
         if (!idx.exists()) return "[]"
         val arr = JSONArray(idx.readText())
@@ -589,10 +592,12 @@ class Bridge(private val act: MainActivity) {
             out.put(o)
         }
         if (dirty) idx.writeText(kept.toString())
-        out.toString()
-    } catch (e: Exception) { "[]" }
+            out.toString()
+        } catch (e: Exception) { "[]" }
+    }
 
-    @JavascriptInterface fun restoreTrash(id: String): Boolean = try {
+    @JavascriptInterface fun restoreTrash(id: String): Boolean {
+        return try {
         val idx = File(trashDir, "index.json")
         if (!idx.exists()) return false
         val arr = JSONArray(idx.readText())
@@ -618,10 +623,12 @@ class Bridge(private val act: MainActivity) {
             }
         }
         idx.writeText(kept.toString())
-        restored
-    } catch (e: Exception) { false }
+            restored
+        } catch (e: Exception) { false }
+    }
 
-    @JavascriptInterface fun wipeTrash(id: String): Boolean = try {
+    @JavascriptInterface fun wipeTrash(id: String): Boolean {
+        return try {
         val idx = File(trashDir, "index.json")
         if (!idx.exists()) return false
         val arr = JSONArray(idx.readText())
@@ -635,8 +642,9 @@ class Bridge(private val act: MainActivity) {
             }
         }
         idx.writeText(kept.toString())
-        true
-    } catch (e: Exception) { false }
+            true
+        } catch (e: Exception) { false }
+    }
 
     @JavascriptInterface fun emptyTrash(): Boolean = try {
         if (trashDir.exists()) {
