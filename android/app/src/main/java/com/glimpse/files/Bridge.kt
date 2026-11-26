@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Process
@@ -205,6 +206,79 @@ class Bridge(private val act: MainActivity) {
         a.toString()
     } catch (e: Exception) { "[]" }
 
+    @JavascriptInterface fun search(query: String, showHidden: Boolean): String = try {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return "[]"
+        val a = JSONArray()
+        val rootPath = root.absolutePath.trimEnd('/') + "/"
+        val seenDirs = HashSet<String>()
+        val uri = MediaStore.Files.getContentUri("external")
+        val proj = arrayOf(FileColumns.DATA)
+        val sel = "${FileColumns.DATA} LIKE ?"
+        val args = arrayOf("%$q%")
+        val sort = "${FileColumns.DATE_MODIFIED} DESC"
+        act.contentResolver.query(uri, proj, sel, args, sort)?.use { c ->
+            while (c.moveToNext() && a.length() < 80) {
+                val path = c.getString(0) ?: continue
+                if (!path.startsWith(rootPath)) continue
+                val rel = path.removePrefix(rootPath)
+                if (rel.startsWith(".glimpse_trash/") || rel.startsWith("Android/")) continue
+                val f = File(path)
+                if (!f.exists()) continue
+                if (!showHidden && f.name.startsWith(".")) continue
+
+                if (f.name.lowercase().contains(q)) {
+                    val parts = rel.split('/')
+                    val parentArr = JSONArray()
+                    for (i in 0 until parts.size - 1) parentArr.put(parts[i])
+                    if (f.isDirectory) {
+                        if (seenDirs.add(f.absolutePath)) {
+                            a.put(
+                                JSONObject()
+                                    .put("n", f.name)
+                                    .put("p", parentArr)
+                                    .put("dir", true)
+                                    .put("s", 0L)
+                                    .put("d", f.lastModified())
+                            )
+                        }
+                    } else if (f.isFile) {
+                        a.put(
+                            JSONObject()
+                                .put("n", f.name)
+                                .put("p", parentArr)
+                                .put("dir", false)
+                                .put("s", f.length())
+                                .put("d", f.lastModified())
+                        )
+                    }
+                }
+
+                // Also check matching parent folder names in the path
+                var curParent = f.parentFile
+                while (curParent != null && curParent.absolutePath.startsWith(rootPath) && curParent.absolutePath != root.absolutePath) {
+                    val dn = curParent.name
+                    if ((showHidden || !dn.startsWith(".")) && dn.lowercase().contains(q) && seenDirs.add(curParent.absolutePath)) {
+                        val dRel = curParent.absolutePath.removePrefix(rootPath)
+                        val dParts = dRel.split('/')
+                        val dParentArr = JSONArray()
+                        for (i in 0 until dParts.size - 1) dParentArr.put(dParts[i])
+                        a.put(
+                            JSONObject()
+                                .put("n", dn)
+                                .put("p", dParentArr)
+                                .put("dir", true)
+                                .put("s", 0L)
+                                .put("d", curParent.lastModified())
+                        )
+                    }
+                    curParent = curParent.parentFile
+                }
+            }
+        }
+        a.toString()
+    } catch (e: Exception) { "[]" }
+
     @JavascriptInterface fun byCategory(cat: String): String = try {
         val a = JSONArray()
         val rootPath = root.absolutePath.trimEnd('/') + "/"
@@ -314,7 +388,47 @@ class Bridge(private val act: MainActivity) {
         }
     }
 
-    // Real Zip inspect: returns JSON array of [{n, s, dir}]
+    @JavascriptInterface fun share(p: String, ns: String) {
+        val d = dir(p)
+        val list = names(ns)
+        val uris = ArrayList<Uri>()
+        var singleMime: String? = null
+        for (n in list) {
+            val f = File(d, n)
+            if (f.isFile) {
+                uris.add(FileProvider.getUriForFile(act, "${act.packageName}.fileprovider", f))
+                if (list.size == 1) {
+                    singleMime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "*/*"
+                }
+            }
+        }
+        if (uris.isEmpty()) {
+            act.toast("Select files to share")
+            return
+        }
+        val intent = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND).apply {
+                type = singleMime ?: "*/*"
+                putExtra(Intent.EXTRA_STREAM, uris[0])
+                clipData = ClipData.newRawUri("", uris[0])
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "*/*"
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        act.runOnUiThread {
+            try {
+                act.startActivity(Intent.createChooser(intent, "Share via").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            } catch (e: Exception) {
+                act.toast("No app available to share")
+            }
+        }
+    }
+
     @JavascriptInterface fun inspectZip(p: String, n: String): String = try {
         val f = File(dir(p), n)
         val arr = JSONArray()
@@ -338,7 +452,6 @@ class Bridge(private val act: MainActivity) {
         arr.toString()
     } catch (e: Exception) { "[]" }
 
-    // Real Zip compress: compresses selected names inside folder p into outName (on background thread, notifies __onZipDone)
     @JavascriptInterface fun zip(p: String, ns: String, outName: String) {
         Thread {
             try {
@@ -388,7 +501,6 @@ class Bridge(private val act: MainActivity) {
         }.start()
     }
 
-    // Real Zip extract: extracts archive n in folder p into destPath (creating subfolder named after archive)
     @JavascriptInterface fun extractZip(p: String, n: String, destPath: String) {
         Thread {
             try {
@@ -404,7 +516,6 @@ class Bridge(private val act: MainActivity) {
                     var e: ZipEntry? = zis.nextEntry
                     while (e != null) {
                         val outF = File(targetDir, e.name)
-                        // Zip-slip path traversal guard
                         if (!outF.canonicalPath.startsWith(targetCanon) && outF.canonicalPath != targetDir.canonicalPath) {
                             throw SecurityException("Invalid zip entry")
                         }
@@ -437,12 +548,102 @@ class Bridge(private val act: MainActivity) {
         val idx = File(trashDir, "index.json"); val arr = if (idx.exists()) JSONArray(idx.readText()) else JSONArray()
         for (n in names(ns)) {
             val src = File(d, n); if (!src.exists()) continue
+            val size = if (src.isDirectory) dirSize(src) else src.length()
             val id = System.currentTimeMillis().toString() + "_" + Math.abs(n.hashCode()); val dst = File(trashDir, id)
             if (!src.renameTo(dst)) { src.copyRecursively(dst, true); src.deleteRecursively() }
-            arr.put(JSONObject().put("id", id).put("name", n).put("from", d.relativeTo(root).path).put("t", System.currentTimeMillis()))
+            arr.put(
+                JSONObject()
+                    .put("id", id)
+                    .put("name", n)
+                    .put("from", d.relativeTo(root).path)
+                    .put("s", size)
+                    .put("dir", dst.isDirectory)
+                    .put("t", System.currentTimeMillis())
+            )
         }
         idx.writeText(arr.toString())
     }
+
+    @JavascriptInterface fun listTrash(maxDays: Int): String = try {
+        val idx = File(trashDir, "index.json")
+        if (!idx.exists()) return "[]"
+        val arr = JSONArray(idx.readText())
+        val out = JSONArray()
+        val kept = JSONArray()
+        val cut = System.currentTimeMillis() - maxDays.toLong() * 86400_000L
+        var dirty = false
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val id = o.optString("id")
+            val f = File(trashDir, id)
+            val t = o.optLong("t", 0L)
+            if (!f.exists()) { dirty = true; continue }
+            if (maxDays > 0 && t > 0L && t < cut) {
+                f.deleteRecursively()
+                dirty = true
+                continue
+            }
+            val size = o.optLong("s", if (f.isDirectory) dirSize(f) else f.length())
+            o.put("s", size).put("dir", f.isDirectory)
+            kept.put(o)
+            out.put(o)
+        }
+        if (dirty) idx.writeText(kept.toString())
+        out.toString()
+    } catch (e: Exception) { "[]" }
+
+    @JavascriptInterface fun restoreTrash(id: String): Boolean = try {
+        val idx = File(trashDir, "index.json")
+        if (!idx.exists()) return false
+        val arr = JSONArray(idx.readText())
+        val kept = JSONArray()
+        var restored = false
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            if (o.optString("id") == id) {
+                val src = File(trashDir, id)
+                val fromRel = o.optString("from", "")
+                val name = o.optString("name", "Restored")
+                val destDir = if (fromRel.isEmpty()) root else File(root, fromRel).apply { mkdirs() }
+                val target = uniq(destDir, name)
+                if (src.exists()) {
+                    if (!src.renameTo(target)) {
+                        src.copyRecursively(target, true)
+                        src.deleteRecursively()
+                    }
+                    restored = true
+                }
+            } else {
+                kept.put(o)
+            }
+        }
+        idx.writeText(kept.toString())
+        restored
+    } catch (e: Exception) { false }
+
+    @JavascriptInterface fun wipeTrash(id: String): Boolean = try {
+        val idx = File(trashDir, "index.json")
+        if (!idx.exists()) return false
+        val arr = JSONArray(idx.readText())
+        val kept = JSONArray()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            if (o.optString("id") == id) {
+                File(trashDir, id).deleteRecursively()
+            } else {
+                kept.put(o)
+            }
+        }
+        idx.writeText(kept.toString())
+        true
+    } catch (e: Exception) { false }
+
+    @JavascriptInterface fun emptyTrash(): Boolean = try {
+        if (trashDir.exists()) {
+            trashDir.listFiles()?.forEach { it.deleteRecursively() }
+        }
+        true
+    } catch (e: Exception) { false }
 
     @JavascriptInterface fun rename(p: String, old: String, new: String) { safe(new); File(dir(p), old).renameTo(File(dir(p), new)) }
     @JavascriptInterface fun mkdir(p: String, n: String) { safe(n); File(dir(p), n).mkdirs() }
