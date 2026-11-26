@@ -1,9 +1,16 @@
 package com.glimpse.files
 
+import android.app.AppOpsManager
+import android.app.usage.StorageStatsManager
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Environment
+import android.os.Process
 import android.os.StatFs
+import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.MediaStore.Files.FileColumns
 import android.webkit.JavascriptInterface
@@ -51,6 +58,80 @@ class Bridge(private val act: MainActivity) {
             total += if (k.isDirectory) dirSize(k, depth + 1) else k.length()
         }
         return total
+    }
+
+    private fun advertisedCapacity(rawTotalBytes: Long): Long {
+        val tiers = longArrayOf(
+            16_000_000_000L,
+            32_000_000_000L,
+            64_000_000_000L,
+            128_000_000_000L,
+            256_000_000_000L,
+            512_000_000_000L,
+            1_000_000_000_000L,
+            2_000_000_000_000L
+        )
+        return tiers.firstOrNull { rawTotalBytes <= it && rawTotalBytes >= (it * 0.72).toLong() } ?: rawTotalBytes
+    }
+
+    private fun hasUsageStatsPermission(): Boolean {
+        return try {
+            val appOps = act.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val mode = if (Build.VERSION.SDK_INT >= 29) {
+                appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), act.packageName)
+            } else {
+                @Suppress("DEPRECATION")
+                appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), act.packageName)
+            }
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun computeAppsBytes(): Long {
+        val pm = act.packageManager
+        val apps = try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0L))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstalledApplications(0)
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        if (Build.VERSION.SDK_INT >= 26 && hasUsageStatsPermission()) {
+            try {
+                val ssm = act.getSystemService(Context.STORAGE_STATS_SERVICE) as StorageStatsManager
+                val user = Process.myUserHandle()
+                val seenUids = HashSet<Int>()
+                var total = 0L
+                for (ai in apps) {
+                    if (!seenUids.add(ai.uid)) continue
+                    val stats = ssm.queryStatsForUid(StorageManager.UUID_DEFAULT, ai.uid)
+                    total += stats.appBytes + stats.dataBytes + stats.cacheBytes
+                }
+                if (total > 0L) return total
+            } catch (_: Exception) {}
+        }
+
+        // Fallback without Usage Access: sum base APKs, split APKs, and external OBB/media folders
+        var fallback = 0L
+        for (ai in apps) {
+            try {
+                ai.sourceDir?.let { File(it).takeIf { f -> f.isFile }?.let { f -> fallback += f.length() } }
+                ai.splitSourceDirs?.forEach { p ->
+                    File(p).takeIf { f -> f.isFile }?.let { f -> fallback += f.length() }
+                }
+            } catch (_: Exception) {}
+        }
+        val obbRoot = File(root, "Android/obb")
+        if (obbRoot.isDirectory) fallback += dirSize(obbRoot, 0)
+        val mediaRoot = File(root, "Android/media")
+        if (mediaRoot.isDirectory) fallback += dirSize(mediaRoot, 0)
+        return fallback
     }
 
     @JavascriptInterface fun hasAccess(): Boolean = act.granted()
@@ -167,25 +248,52 @@ class Bridge(private val act: MainActivity) {
     } catch (e: Exception) { "[]" }
 
     @JavascriptInterface fun info(): String {
-        val st = StatFs(root.path); val total = st.totalBytes; val used = total - st.availableBytes
-        var img = 0L; var vid = 0L; var arc = 0L; var doc = 0L; var oth = 0L
+        val st = StatFs(root.path)
+        val dataTotal = st.totalBytes
+        val avail = st.availableBytes
+        val total = advertisedCapacity(dataTotal)
+        val used = maxOf(0L, total - avail)
+
+        var img = 0L; var vid = 0L; var aud = 0L; var arc = 0L; var doc = 0L; var oth = 0L
         try {
-            act.contentResolver.query(MediaStore.Files.getContentUri("external"), arrayOf(FileColumns.SIZE, FileColumns.MEDIA_TYPE, FileColumns.MIME_TYPE), null, null, null)?.use {
+            act.contentResolver.query(
+                MediaStore.Files.getContentUri("external"),
+                arrayOf(FileColumns.SIZE, FileColumns.MEDIA_TYPE, FileColumns.MIME_TYPE, FileColumns.DATA),
+                null, null, null
+            )?.use {
                 while (it.moveToNext()) {
-                    val s = it.getLong(0); val t = it.getInt(1); val m = it.getString(2) ?: ""
+                    val s = it.getLong(0)
+                    val t = it.getInt(1)
+                    val m = it.getString(2) ?: ""
+                    val path = it.getString(3) ?: ""
+                    val ext = path.substringAfterLast('.', "").lowercase()
                     when {
                         t == FileColumns.MEDIA_TYPE_IMAGE -> img += s
                         t == FileColumns.MEDIA_TYPE_VIDEO -> vid += s
-                        m.contains("zip") || m.contains("rar") || m.contains("7z") || m.contains("tar") -> arc += s
-                        m.contains("pdf") || m.contains("word") || m.contains("sheet") || m.contains("presentation") || m.startsWith("text/") -> doc += s
+                        t == FileColumns.MEDIA_TYPE_AUDIO || m.startsWith("audio/") || ext in setOf("mp3", "flac", "m4a", "wav", "ogg", "aac", "opus") -> aud += s
+                        m.contains("zip") || m.contains("rar") || m.contains("7z") || m.contains("tar") || ext in setOf("zip", "rar", "7z", "tar", "gz") -> arc += s
+                        m.contains("pdf") || m.contains("word") || m.contains("sheet") || m.contains("presentation") || m.startsWith("text/") || ext in setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv") -> doc += s
                         else -> oth += s
                     }
                 }
             }
         } catch (_: Exception) {}
-        val sys = maxOf(0L, used - img - vid - arc - doc - oth)
+
+        val rawApps = computeAppsBytes()
+        val maxApps = maxOf(0L, used - img - vid - aud - arc - doc - oth)
+        val apps = minOf(rawApps, maxApps)
+        val sys = maxOf(0L, used - apps - img - vid - aud - arc - doc - oth)
+
         fun b(n: String, v: Long) = JSONObject().put("name", n).put("bytes", v)
-        val br = JSONArray().put(b("Images", img)).put(b("Videos", vid)).put(b("Archives", arc)).put(b("Documents", doc)).put(b("Other", oth)).put(b("System", sys))
+        val br = JSONArray()
+            .put(b("Apps", apps))
+            .put(b("Images", img))
+            .put(b("Videos", vid))
+            .put(b("Audio", aud))
+            .put(b("Archives", arc))
+            .put(b("Documents", doc))
+            .put(b("Other", oth))
+            .put(b("System", sys))
         return JSONObject().put("total", total).put("used", used).put("breakdown", br).toString()
     }
 
