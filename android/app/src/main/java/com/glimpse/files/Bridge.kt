@@ -229,7 +229,7 @@ class Bridge(private val act: MainActivity) {
         val a = JSONArray()
         dir(p).listFiles()?.forEach {
             val isDir = it.isDirectory
-            val cnt = if (isDir) (it.listFiles()?.size ?: 0) else 0
+            val cnt = if (isDir) (it.list()?.size ?: 0) else 0
             val size = if (isDir) 0L else it.length()
             a.put(
                 JSONObject()
@@ -363,52 +363,92 @@ class Bridge(private val act: MainActivity) {
         } catch (e: Exception) { "[]" }
     }
 
-    @JavascriptInterface fun byCategory(cat: String): String = try {
-        val a = JSONArray()
-        val rootPath = root.absolutePath.trimEnd('/') + "/"
-        val uri = MediaStore.Files.getContentUri("external")
-        val proj = arrayOf(FileColumns.DATA, FileColumns.SIZE, FileColumns.DATE_MODIFIED)
-        val sort = "${FileColumns.DATE_MODIFIED} DESC"
-        val extMap = mapOf(
-            "img" to setOf("jpg", "jpeg", "png", "webp", "gif", "heic", "bmp"),
-            "vid" to setOf("mp4", "mkv", "avi", "mov", "webm", "3gp"),
-            "apk" to setOf("apk", "apks", "xapk"),
-            "arc" to setOf("zip", "rar", "7z", "tar", "gz", "bz2"),
-            "doc" to setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "md"),
-            "aud" to setOf("mp3", "flac", "m4a", "wav", "ogg", "aac", "opus")
-        )
-        val now = System.currentTimeMillis()
-        val weekCut = now - 7L * 86400_000L
-        act.contentResolver.query(uri, proj, "${FileColumns.SIZE} > 0", null, sort)?.use { c ->
-            while (c.moveToNext() && a.length() < 300) {
-                val path = c.getString(0) ?: continue
-                if (!path.startsWith(rootPath)) continue
-                val rel = path.removePrefix(rootPath)
-                if (rel.startsWith(".glimpse_trash/") || rel.startsWith("Android/")) continue
-                val f = File(path)
-                if (!f.isFile || f.name.startsWith(".")) continue
-                val ext = f.extension.lowercase()
-                val match = when (cat) {
-                    "dl" -> rel.startsWith("Download/")
-                    "big" -> f.length() > 50L * 1024L * 1024L
-                    "week" -> f.lastModified() >= weekCut
-                    else -> extMap[cat]?.contains(ext) == true
-                }
-                if (!match) continue
-                val parts = rel.split('/')
-                val parentArr = JSONArray()
-                for (i in 0 until parts.size - 1) parentArr.put(parts[i])
-                a.put(
-                    JSONObject()
-                        .put("n", f.name)
-                        .put("p", parentArr)
-                        .put("s", f.length())
-                        .put("d", f.lastModified())
-                )
+    @JavascriptInterface fun byCategory(cat: String): String {
+        return try {
+            val a = JSONArray()
+            val rootPath = root.absolutePath.trimEnd('/') + "/"
+            val uri = MediaStore.Files.getContentUri("external")
+            val proj = arrayOf(FileColumns.DATA, FileColumns.SIZE, FileColumns.DATE_MODIFIED)
+            val weekSec = (System.currentTimeMillis() - 7L * 86400_000L) / 1000L
+
+            val whereBuilder = StringBuilder("${FileColumns.SIZE} > 0 AND ${FileColumns.DATA} LIKE ? AND ${FileColumns.DATA} NOT LIKE ? AND ${FileColumns.DATA} NOT LIKE ?")
+            val argsList = ArrayList<String>().apply {
+                add("$rootPath%")
+                add("${rootPath}Android/%")
+                add("${rootPath}.glimpse_trash/%")
             }
-        }
-        a.toString()
-    } catch (e: Exception) { "[]" }
+
+            when (cat) {
+                "img" -> whereBuilder.append(" AND ${FileColumns.MEDIA_TYPE} = ${FileColumns.MEDIA_TYPE_IMAGE}")
+                "vid" -> whereBuilder.append(" AND ${FileColumns.MEDIA_TYPE} = ${FileColumns.MEDIA_TYPE_VIDEO}")
+                "aud" -> whereBuilder.append(" AND ${FileColumns.MEDIA_TYPE} = ${FileColumns.MEDIA_TYPE_AUDIO}")
+                "dl" -> {
+                    whereBuilder.append(" AND ${FileColumns.DATA} LIKE ?")
+                    argsList.add("${rootPath}Download/%")
+                }
+                "big" -> whereBuilder.append(" AND ${FileColumns.SIZE} > 52428800")
+                "week" -> whereBuilder.append(" AND ${FileColumns.DATE_MODIFIED} >= $weekSec")
+                "apk" -> whereBuilder.append(" AND (LOWER(${FileColumns.DATA}) LIKE '%.apk' OR LOWER(${FileColumns.DATA}) LIKE '%.apks' OR LOWER(${FileColumns.DATA}) LIKE '%.xapk')")
+                "arc" -> whereBuilder.append(" AND (LOWER(${FileColumns.DATA}) LIKE '%.zip' OR LOWER(${FileColumns.DATA}) LIKE '%.rar' OR LOWER(${FileColumns.DATA}) LIKE '%.7z' OR LOWER(${FileColumns.DATA}) LIKE '%.tar' OR LOWER(${FileColumns.DATA}) LIKE '%.gz')")
+                "doc" -> whereBuilder.append(" AND (LOWER(${FileColumns.DATA}) LIKE '%.pdf' OR LOWER(${FileColumns.DATA}) LIKE '%.doc' OR LOWER(${FileColumns.DATA}) LIKE '%.docx' OR LOWER(${FileColumns.DATA}) LIKE '%.xls' OR LOWER(${FileColumns.DATA}) LIKE '%.xlsx' OR LOWER(${FileColumns.DATA}) LIKE '%.ppt' OR LOWER(${FileColumns.DATA}) LIKE '%.pptx' OR LOWER(${FileColumns.DATA}) LIKE '%.txt' OR LOWER(${FileColumns.DATA}) LIKE '%.csv')")
+            }
+
+            val sort = when (cat) {
+                "big" -> "${FileColumns.SIZE} DESC"
+                else -> "${FileColumns.DATE_MODIFIED} DESC"
+            }
+
+            act.contentResolver.query(uri, proj, whereBuilder.toString(), argsList.toTypedArray(), sort)?.use { c ->
+                while (c.moveToNext() && a.length() < 400) {
+                    val path = c.getString(0) ?: continue
+                    val rel = path.removePrefix(rootPath)
+                    val slashIdx = rel.lastIndexOf('/')
+                    val name = if (slashIdx >= 0) rel.substring(slashIdx + 1) else rel
+                    if (name.isEmpty() || name.startsWith(".")) continue
+                    val size = c.getLong(1)
+                    val modMs = c.getLong(2) * 1000L
+                    val parentArr = JSONArray()
+                    if (slashIdx > 0) {
+                        var start = 0
+                        while (start < slashIdx) {
+                            val next = rel.indexOf('/', start)
+                            if (next < 0 || next >= slashIdx) {
+                                parentArr.put(rel.substring(start, slashIdx))
+                                break
+                            } else {
+                                parentArr.put(rel.substring(start, next))
+                                start = next + 1
+                            }
+                        }
+                    }
+                    a.put(
+                        JSONObject()
+                            .put("n", name)
+                            .put("p", parentArr)
+                            .put("s", size)
+                            .put("d", modMs)
+                    )
+                }
+            }
+            a.toString()
+        } catch (e: Exception) { "[]" }
+    }
+
+    @JavascriptInterface fun listAsync(reqId: Int, p: String) {
+        Thread {
+            val res = list(p)
+            val js = "window.__onBridge&&window.__onBridge($reqId,$res)"
+            act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+        }.start()
+    }
+
+    @JavascriptInterface fun byCategoryAsync(reqId: Int, cat: String) {
+        Thread {
+            val res = byCategory(cat)
+            val js = "window.__onBridge&&window.__onBridge($reqId,$res)"
+            act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+        }.start()
+    }
 
     @JavascriptInterface fun info(): String {
         val st = StatFs(root.path)

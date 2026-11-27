@@ -67,10 +67,13 @@ class MainActivity : Activity() {
 
     companion object {
         // Gives the page the window.GlimpseNative object it expects (promises + arrays) on top of the string-only Java bridge.
-        const val SHIM = """(function(){var A=window.GlimpseAndroid,S=JSON.stringify,P=JSON.parse;window.GlimpseNative={
-list:function(p){return Promise.resolve(P(A.list(S(p))))},info:function(){return Promise.resolve(P(A.info()))},
+        const val SHIM = """(function(){var A=window.GlimpseAndroid,S=JSON.stringify,P=JSON.parse,Q={},N=0;
+window.__onBridge=function(id,data){var cb=Q[id];if(cb){delete Q[id];cb(data)}};
+function bg(fn,arg){return new Promise(function(r){var id=++N;Q[id]=r;fn(id,arg)})}
+window.GlimpseNative={
+list:function(p){return bg(function(i,a){A.listAsync(i,a)},S(p))},info:function(){return Promise.resolve(P(A.info()))},
 calcSizes:function(p){A.calcSizes(S(p))},
-recent:function(l){return Promise.resolve(P(A.recent(l||15)))},byCategory:function(c){return Promise.resolve(P(A.byCategory(c)))},
+recent:function(l){return Promise.resolve(P(A.recent(l||15)))},byCategory:function(c){return bg(function(i,a){A.byCategoryAsync(i,a)},c)},
 search:function(q,h){return Promise.resolve(P(A.search(q,!!h)))},
 inspectZip:function(p,n){return Promise.resolve(P(A.inspectZip(S(p),n)))},
 zip:function(p,n,o){A.zip(S(p),S(n),o)},extractZip:function(p,n,d){A.extractZip(S(p),n,S(d))},
