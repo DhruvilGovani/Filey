@@ -18,9 +18,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Sync index.html into Android assets
         run: |
           mkdir -p android/app/src/main/assets
@@ -43,3 +40,4 @@ jobs:
         with:
           name: Glimpse-apk
           path: out/Glimpse.apk
+          
