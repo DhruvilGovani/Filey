@@ -403,7 +403,7 @@ fun StorageAnalyticsOverlayScreen(vm: GlimpseViewModel) {
                                 val dx = offset.x - cx
                                 val dy = offset.y - cy
                                 val dist = hypot(dx, dy)
-                                val outerR = size.minDimension / 2f
+                                val outerR = minOf(size.width, size.height) / 2f
                                 val innerR = outerR * 0.45f
                                 if (dist in innerR..outerR && slices.isNotEmpty()) {
                                     var angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat() + 90f

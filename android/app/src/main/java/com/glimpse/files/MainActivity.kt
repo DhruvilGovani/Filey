@@ -1,11 +1,9 @@
 package com.glimpse.files
 
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.provider.Settings
 import android.view.WindowManager
 import android.widget.Toast
@@ -13,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -80,6 +79,9 @@ import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private var vmRef: GlimpseViewModel? = null
+    private val legacyPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { vmRef?.recheckAccess() }
 
     private fun enableHighRefreshRate() {
         try {
@@ -111,12 +113,11 @@ class MainActivity : ComponentActivity() {
                     startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                 }
             } else {
-                requestPermissions(
+                legacyPermLauncher.launch(
                     arrayOf(
                         android.Manifest.permission.READ_EXTERNAL_STORAGE,
                         android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    ),
-                    1
+                    )
                 )
             }
         } catch (_: Exception) {
@@ -149,16 +150,6 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         enableHighRefreshRate()
         vmRef?.recheckAccess()
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (grantResults.any { it == PackageManager.PERMISSION_GRANTED } ||
-            (Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager())
-        ) {
-            vmRef?.recheckAccess()
-        }
     }
 }
 
