@@ -51,7 +51,7 @@ class Bridge(private val act: MainActivity) {
     private val root: File = Environment.getExternalStorageDirectory()
     private val trashDir = File(root, ".glimpse_trash")
     private var ftp: FtpServer? = null
-    private val thumbCache = object : LruCache<String, ByteArray>(8 * 1024 * 1024) {
+    private val thumbCache = object : LruCache<String, ByteArray>(16 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size
     }
 
@@ -60,15 +60,15 @@ class Bridge(private val act: MainActivity) {
         decodeFn(bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
-        while (bounds.outWidth / sample > 256 && bounds.outHeight / sample > 256) {
+        while (bounds.outWidth / (sample * 2) >= 320 && bounds.outHeight / (sample * 2) >= 320) {
             sample *= 2
         }
         val opts = BitmapFactory.Options().apply {
             inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.RGB_565
+            inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val raw = decodeFn(opts) ?: return null
-        val size = 96
+        val size = 320
         val minSide = minOf(raw.width, raw.height).coerceAtLeast(1)
         val x = (raw.width - minSide) / 2
         val y = (raw.height - minSide) / 2
@@ -77,7 +77,7 @@ class Bridge(private val act: MainActivity) {
         val scaled = if (cropped.width == size) cropped else Bitmap.createScaledBitmap(cropped, size, size, true)
         if (scaled !== cropped) cropped.recycle()
         val out = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, 78, out)
+        scaled.compress(Bitmap.CompressFormat.JPEG, 86, out)
         scaled.recycle()
         return out.toByteArray()
     }
@@ -114,7 +114,7 @@ class Bridge(private val act: MainActivity) {
                         try { mmr.release() } catch (_: Exception) {}
                     }
                     if (frame != null) {
-                        val size = 96
+                        val size = 320
                         val minSide = minOf(frame.width, frame.height).coerceAtLeast(1)
                         val x = (frame.width - minSide) / 2
                         val y = (frame.height - minSide) / 2
@@ -123,7 +123,7 @@ class Bridge(private val act: MainActivity) {
                         val scaled = if (cropped.width == size) cropped else Bitmap.createScaledBitmap(cropped, size, size, true)
                         if (scaled !== cropped) cropped.recycle()
                         val out = ByteArrayOutputStream()
-                        scaled.compress(Bitmap.CompressFormat.JPEG, 78, out)
+                        scaled.compress(Bitmap.CompressFormat.JPEG, 86, out)
                         scaled.recycle()
                         out.toByteArray()
                     } else null
@@ -157,7 +157,7 @@ class Bridge(private val act: MainActivity) {
                         }
                         val drw = appInfo?.loadIcon(pm)
                         if (drw != null) {
-                            val size = 96
+                            val size = 256
                             val bmp = if (drw is BitmapDrawable && drw.bitmap != null) {
                                 Bitmap.createScaledBitmap(drw.bitmap, size, size, true)
                             } else {
