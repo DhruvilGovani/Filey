@@ -31,7 +31,7 @@ main{position:absolute;inset:68px 0 92px}
 .pie{position:absolute;right:12px;bottom:12px;width:44px;height:44px;border-radius:15px;display:grid;place-items:center;color:var(--acc)}
 .cats{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:1fr 1fr;gap:10px}
 .cat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:12px;border-radius:20px;padding:4px;color:var(--ink)}.cat .ic{width:28px;height:28px;color:var(--c);filter:drop-shadow(0 3px 7px color-mix(in srgb,var(--c) 50%,transparent))}
-.recw{display:flex;flex-direction:column;gap:6px;min-height:0}.recw h3,.ov h2{font-size:15px;font-weight:700}
+.recw{display:flex;flex-direction:column;gap:6px;min-height:0}.recw h3,.ov h2{font-size:15px;font-weight:700}.rech{display:flex;align-items:center;gap:4px;align-self:flex-start;padding:2px 6px 2px 0;border-radius:10px;cursor:pointer}.rech .ic{width:17px;height:17px;color:var(--mut);transition:transform .25s}.rech:active .ic{transform:translateX(3px)}
 #rec{flex:1;display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-inline:16px;margin:0 -16px;padding:2px 16px 14px;scrollbar-width:none}
 .rc{flex:0 0 calc(50% - 6px);width:calc(50% - 6px);min-width:0;max-width:calc(50% - 6px);overflow:hidden;scroll-snap-align:start;padding:12px;display:flex;flex-direction:column;justify-content:space-between;gap:6px;text-align:left;border-radius:22px}
 .rc b,.rt b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;font-weight:650}.rc small{color:var(--mut)}
@@ -99,7 +99,7 @@ main{inset:68px 0 80px}#home{grid-template-rows:minmax(138px,28%) minmax(150px,3
 <section id="home" class="view on">
 <div class="sc glass tilt"><div><small>Internal storage</small><div class="big" id="su">68.4 GB used</div><small id="sf">59.6 GB free of 128 GB</small></div><div class="bar" style="margin-right:56px"><b id="fill"></b></div><button class="pie glass tilt" data-a="pie" aria-label="Storage analytics" id="bpie"></button></div>
 <div class="cats" id="cats"></div>
-<div class="recw"><h3>Recent</h3><div id="rec"></div></div>
+<div class="recw"><button class="rech" data-a="allrec" aria-label="View all recent files"><h3>Recent</h3><span id="reca"></span></button><div id="rec"></div></div>
 </section>
 <section id="browse" class="view"><div class="crumb glass" id="crumb"></div><div id="bbody"></div></section>
 </main>
@@ -162,6 +162,7 @@ function refresh(){home();browse()}
 const A={
 tab(a){go(a.dataset.v)},
 settings:()=>settingsOv(),search:()=>searchOv(),pie:()=>pieOv(),
+allrec(){if(NB&&NB.recent){const o=push('Recent','<div class="empty">Loading...</div>');o._title='Recent';o._sm='date';Promise.resolve(NB.recent(250)).then(l=>{if(!o.isConnected)return;o._raw=l.map(r=>({f:{n:r.n,s:r.s,d:r.d},p:r.p}));renderOvList(o,o._raw)}).catch(()=>{if(o.isConnected)$('.ob',o).innerHTML='<div class="empty">Nothing here yet.</div>'})}else listOv('Recent',files().sort((a,b)=>b.f.d-a.f.d).slice(0,100))},
 cat(a){const k=a.dataset.c;if(k=='more')return toolsOv();const t=CATS.find(c=>c[0]==k)[1];if(NB&&NB.byCategory){const o=push(t,'<div class="empty">Loading...</div>');o._title=t;o._sm='date';Promise.resolve(NB.byCategory(k)).then(l=>{if(!o.isConnected)return;o._raw=l.map(r=>({f:{n:r.n,s:r.s,d:r.d},p:r.p}));renderOvList(o,o._raw)}).catch(()=>{if(o.isConnected)$('.ob',o).innerHTML='<div class="empty">Nothing here yet.</div>'})}else listOv(t,files().filter(x=>k=='dl'?x.p[0]=='Download':cat(x.f.n)==k))},
 dir(a){cur.push(a.dataset.n);browse()},crumb(a){cur=cur.slice(0,+a.dataset.n+1);browse()},
 file(a){sheetFile(reg[a.dataset.id])},
@@ -225,7 +226,7 @@ function apply(lite){saveS();const r=document.documentElement;r.style.setPropert
 document.addEventListener('pointermove',e=>{const t=e.target.closest('.tilt');if(!t||e.pointerType=='touch')return;const r=t.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;t.style.setProperty('--ry',x*8+'deg');t.style.setProperty('--rx',-y*8+'deg');t.style.setProperty('--mx',(x+.5)*100+'%');t.style.setProperty('--my',(y+.5)*100+'%')});
 document.addEventListener('pointerdown',e=>{const t=e.target.closest('.tilt');if(!t)return;const r=t.getBoundingClientRect();t.style.setProperty('--mx',(e.clientX-r.left)/r.width*100+'%');t.style.setProperty('--my',(e.clientY-r.top)/r.height*100+'%')});
 document.addEventListener('pointerout',e=>{const t=e.target.closest?.('.tilt');t&&(t.style.setProperty('--rx','0deg'),t.style.setProperty('--ry','0deg'))});
-$('#bset').innerHTML=ic('settings');$('#bsea').innerHTML=ic('search');$('#bpie').innerHTML=ic('pie');$('#nh').innerHTML=ic('home')+'Home';$('#nb').innerHTML=ic('folder')+'Browse';
+$('#bset').innerHTML=ic('settings');$('#reca').innerHTML=ic('chev');$('#bsea').innerHTML=ic('search');$('#bpie').innerHTML=ic('pie');$('#nh').innerHTML=ic('home')+'Home';$('#nb').innerHTML=ic('folder')+'Browse';
 I.plus='<path d="M12 5v14M5 12h14"/>';I.check='<path d="m5 12 4 4 10-10"/>';
 $('#sa').innerHTML=[['bcopy','copy','Copy'],['bmove','move','Move'],['bzip','archive','Zip'],['bshare','share','Share'],['bdel','trash','Delete']].map(([a,i,l])=>`<button data-a="${a}">${ic(i)}<span>${l}</span></button>`).join('');$('#badd').innerHTML=ic('plus');
 const cl=x=>x.c?dir(x.n,...x.c.map(cl)):{...x};

@@ -74,7 +74,7 @@ function bg(fn,arg){return new Promise(function(r){var id=++N;Q[id]=r;fn(id,arg)
 window.GlimpseNative={
 list:function(p){return bg(function(i,a){A.listAsync(i,a)},S(p))},info:function(){return Promise.resolve(P(A.info()))},
 calcSizes:function(p){A.calcSizes(S(p))},
-recent:function(l){return Promise.resolve(P(A.recent(l||15)))},byCategory:function(c){return bg(function(i,a){A.byCategoryAsync(i,a)},c)},
+recent:function(l){return bg(function(i,a){A.recentAsync(i,a)},l||15)},byCategory:function(c){return bg(function(i,a){A.byCategoryAsync(i,a)},c)},
 search:function(q,h){return Promise.resolve(P(A.search(q,!!h)))},
 inspectZip:function(p,n){return Promise.resolve(P(A.inspectZip(S(p),n)))},
 zip:function(p,n,o){A.zip(S(p),S(n),o)},extractZip:function(p,n,d){A.extractZip(S(p),n,S(d))},

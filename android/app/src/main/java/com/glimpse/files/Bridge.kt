@@ -320,35 +320,58 @@ class Bridge(private val act: MainActivity) {
         }.start()
     }
 
-    @JavascriptInterface fun recent(limit: Int): String = try {
-        val a = JSONArray()
-        val rootPath = root.absolutePath.trimEnd('/') + "/"
-        val uri = MediaStore.Files.getContentUri("external")
-        val proj = arrayOf(FileColumns.DATA, FileColumns.SIZE, FileColumns.DATE_MODIFIED)
-        val sel = "${FileColumns.SIZE} > 0"
-        val sort = "${FileColumns.DATE_MODIFIED} DESC"
-        act.contentResolver.query(uri, proj, sel, null, sort)?.use { c ->
-            while (c.moveToNext() && a.length() < limit) {
-                val path = c.getString(0) ?: continue
-                if (!path.startsWith(rootPath)) continue
-                val rel = path.removePrefix(rootPath)
-                if (rel.startsWith(".glimpse_trash/") || rel.startsWith("Android/")) continue
-                val f = File(path)
-                if (!f.isFile || f.name.startsWith(".")) continue
-                val parts = rel.split('/')
-                val parentArr = JSONArray()
-                for (i in 0 until parts.size - 1) parentArr.put(parts[i])
-                a.put(
-                    JSONObject()
-                        .put("n", f.name)
-                        .put("p", parentArr)
-                        .put("s", f.length())
-                        .put("d", f.lastModified())
-                )
+    @JavascriptInterface fun recent(limit: Int): String {
+        return try {
+            val a = JSONArray()
+            val rootPath = root.absolutePath.trimEnd('/') + "/"
+            val uri = MediaStore.Files.getContentUri("external")
+            val proj = arrayOf(FileColumns.DATA, FileColumns.SIZE, FileColumns.DATE_MODIFIED)
+            val sel = "${FileColumns.SIZE} > 0 AND ${FileColumns.DATA} LIKE ? AND ${FileColumns.DATA} NOT LIKE ? AND ${FileColumns.DATA} NOT LIKE ?"
+            val args = arrayOf("$rootPath%", "${rootPath}Android/%", "${rootPath}.glimpse_trash/%")
+            val sort = "${FileColumns.DATE_MODIFIED} DESC"
+            act.contentResolver.query(uri, proj, sel, args, sort)?.use { c ->
+                while (c.moveToNext() && a.length() < limit) {
+                    val path = c.getString(0) ?: continue
+                    val rel = path.removePrefix(rootPath)
+                    val slashIdx = rel.lastIndexOf('/')
+                    val name = if (slashIdx >= 0) rel.substring(slashIdx + 1) else rel
+                    if (name.isEmpty() || name.startsWith(".")) continue
+                    val size = c.getLong(1)
+                    val modMs = c.getLong(2) * 1000L
+                    val parentArr = JSONArray()
+                    if (slashIdx > 0) {
+                        var start = 0
+                        while (start < slashIdx) {
+                            val next = rel.indexOf('/', start)
+                            if (next < 0 || next >= slashIdx) {
+                                parentArr.put(rel.substring(start, slashIdx))
+                                break
+                            } else {
+                                parentArr.put(rel.substring(start, next))
+                                start = next + 1
+                            }
+                        }
+                    }
+                    a.put(
+                        JSONObject()
+                            .put("n", name)
+                            .put("p", parentArr)
+                            .put("s", size)
+                            .put("d", modMs)
+                    )
+                }
             }
-        }
-        a.toString()
-    } catch (e: Exception) { "[]" }
+            a.toString()
+        } catch (e: Exception) { "[]" }
+    }
+
+    @JavascriptInterface fun recentAsync(reqId: Int, limit: Int) {
+        Thread {
+            val res = recent(limit)
+            val js = "window.__onBridge&&window.__onBridge($reqId,$res)"
+            act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+        }.start()
+    }
 
     @JavascriptInterface fun search(query: String, showHidden: Boolean): String {
         return try {
