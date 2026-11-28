@@ -213,7 +213,7 @@ class GlimpseViewModel(app: Application) : AndroidViewModel(app) {
         return false
     }
 
-    fun setOverlaySort(mode: SortMode) {
+    fun changeOverlaySort(mode: SortMode) {
         overlaySort = mode
         overlayItems = sortFiles(overlayItems, mode)
     }
