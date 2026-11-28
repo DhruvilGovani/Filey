@@ -43,7 +43,8 @@ class MainActivity : Activity() {
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .addPathHandler("/thumb/") { path ->
-                bridge.thumbStream(path)?.let { WebResourceResponse("image/jpeg", null, it) }
+                val mime = if (path.endsWith(".apk", ignoreCase = true)) "image/png" else "image/jpeg"
+                bridge.thumbStream(path)?.let { WebResourceResponse(mime, null, it) }
             }
             .build()
         web.settings.apply { javaScriptEnabled = true; domStorageEnabled = true; allowFileAccess = false; allowContentAccess = false }

@@ -28,6 +28,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.media.MediaMetadataRetriever
 import android.util.LruCache
 import java.io.BufferedInputStream
@@ -113,6 +115,40 @@ class Bridge(private val act: MainActivity) {
                     if (pic != null && pic.isNotEmpty()) {
                         toThumbJpeg { opts -> BitmapFactory.decodeByteArray(pic, 0, pic.size, opts) }
                     } else null
+                }
+                "apk" -> {
+                    try {
+                        val pm = act.packageManager
+                        val pi = if (Build.VERSION.SDK_INT >= 33) {
+                            pm.getPackageArchiveInfo(f.absolutePath, PackageManager.PackageInfoFlags.of(0L))
+                        } else {
+                            @Suppress("DEPRECATION")
+                            pm.getPackageArchiveInfo(f.absolutePath, 0)
+                        }
+                        val appInfo = pi?.applicationInfo?.apply {
+                            sourceDir = f.absolutePath
+                            publicSourceDir = f.absolutePath
+                        }
+                        val drw = appInfo?.loadIcon(pm)
+                        if (drw != null) {
+                            val size = 96
+                            val bmp = if (drw is BitmapDrawable && drw.bitmap != null) {
+                                Bitmap.createScaledBitmap(drw.bitmap, size, size, true)
+                            } else {
+                                Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { canvasBmp ->
+                                    val c = Canvas(canvasBmp)
+                                    drw.setBounds(0, 0, size, size)
+                                    drw.draw(c)
+                                }
+                            }
+                            val out = ByteArrayOutputStream()
+                            bmp.compress(Bitmap.CompressFormat.PNG, 90, out)
+                            bmp.recycle()
+                            out.toByteArray()
+                        } else null
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
                 else -> null
             }
@@ -363,8 +399,56 @@ class Bridge(private val act: MainActivity) {
         } catch (e: Exception) { "[]" }
     }
 
+    private fun scanDocsDirect(): JSONArray {
+        val a = JSONArray()
+        val docExts = setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "md", "rtf", "odt", "ods", "odp", "epub", "json", "xml")
+        val seen = HashSet<String>()
+
+        fun walk(d: File, depth: Int) {
+            if (depth > 8 || a.length() >= 400) return
+            val kids = d.listFiles() ?: return
+            for (f in kids) {
+                if (a.length() >= 400) break
+                val name = f.name
+                if (name.startsWith(".")) continue
+                if (f.isDirectory) {
+                    if (depth == 0 && name == "Android") continue
+                    walk(f, depth + 1)
+                } else if (f.isFile && f.length() > 0L) {
+                    val ext = f.extension.lowercase()
+                    if (ext in docExts && seen.add(f.absolutePath)) {
+                        val rel = f.relativeTo(root).path
+                        val slashIdx = rel.lastIndexOf('/')
+                        val parentArr = JSONArray()
+                        if (slashIdx > 0) {
+                            rel.substring(0, slashIdx).split('/').forEach { parentArr.put(it) }
+                        }
+                        a.put(
+                            JSONObject()
+                                .put("n", name)
+                                .put("p", parentArr)
+                                .put("s", f.length())
+                                .put("d", f.lastModified())
+                        )
+                    }
+                }
+            }
+        }
+        walk(root, 0)
+        // Sort newest first
+        val list = ArrayList<JSONObject>(a.length())
+        for (i in 0 until a.length()) list.add(a.getJSONObject(i))
+        list.sortByDescending { it.optLong("d", 0L) }
+        val sorted = JSONArray()
+        list.forEach { sorted.put(it) }
+        return sorted
+    }
+
     @JavascriptInterface fun byCategory(cat: String): String {
         return try {
+            if (cat == "doc") {
+                return scanDocsDirect().toString()
+            }
             val a = JSONArray()
             val rootPath = root.absolutePath.trimEnd('/') + "/"
             val uri = MediaStore.Files.getContentUri("external")
@@ -390,7 +474,6 @@ class Bridge(private val act: MainActivity) {
                 "week" -> whereBuilder.append(" AND ${FileColumns.DATE_MODIFIED} >= $weekSec")
                 "apk" -> whereBuilder.append(" AND (LOWER(${FileColumns.DATA}) LIKE '%.apk' OR LOWER(${FileColumns.DATA}) LIKE '%.apks' OR LOWER(${FileColumns.DATA}) LIKE '%.xapk')")
                 "arc" -> whereBuilder.append(" AND (LOWER(${FileColumns.DATA}) LIKE '%.zip' OR LOWER(${FileColumns.DATA}) LIKE '%.rar' OR LOWER(${FileColumns.DATA}) LIKE '%.7z' OR LOWER(${FileColumns.DATA}) LIKE '%.tar' OR LOWER(${FileColumns.DATA}) LIKE '%.gz')")
-                "doc" -> whereBuilder.append(" AND (LOWER(${FileColumns.DATA}) LIKE '%.pdf' OR LOWER(${FileColumns.DATA}) LIKE '%.doc' OR LOWER(${FileColumns.DATA}) LIKE '%.docx' OR LOWER(${FileColumns.DATA}) LIKE '%.xls' OR LOWER(${FileColumns.DATA}) LIKE '%.xlsx' OR LOWER(${FileColumns.DATA}) LIKE '%.ppt' OR LOWER(${FileColumns.DATA}) LIKE '%.pptx' OR LOWER(${FileColumns.DATA}) LIKE '%.txt' OR LOWER(${FileColumns.DATA}) LIKE '%.csv')")
             }
 
             val sort = when (cat) {
