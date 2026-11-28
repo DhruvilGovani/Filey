@@ -884,6 +884,30 @@ class Bridge(private val act: MainActivity) {
         true
     } catch (e: Exception) { false }
 
+    @JavascriptInterface fun emptyTrashAsync(reqId: Int) {
+        Thread {
+            val ok = emptyTrash()
+            val js = "window.__onBridge&&window.__onBridge($reqId,$ok)"
+            act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+        }.start()
+    }
+
+    @JavascriptInterface fun wipeTrashAsync(reqId: Int, id: String) {
+        Thread {
+            val ok = wipeTrash(id)
+            val js = "window.__onBridge&&window.__onBridge($reqId,$ok)"
+            act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+        }.start()
+    }
+
+    @JavascriptInterface fun restoreTrashAsync(reqId: Int, id: String) {
+        Thread {
+            val ok = restoreTrash(id)
+            val js = "window.__onBridge&&window.__onBridge($reqId,$ok)"
+            act.runOnUiThread { act.web.evaluateJavascript(js, null) }
+        }.start()
+    }
+
     @JavascriptInterface fun rename(p: String, old: String, new: String) { safe(new); File(dir(p), old).renameTo(File(dir(p), new)) }
     @JavascriptInterface fun mkdir(p: String, n: String) { safe(n); File(dir(p), n).mkdirs() }
     @JavascriptInterface fun createFile(p: String, n: String) { safe(n); File(dir(p), n).createNewFile() }
