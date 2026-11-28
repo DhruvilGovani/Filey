@@ -102,6 +102,32 @@ class Bridge(private val act: MainActivity) {
                 "jpg", "jpeg", "png", "webp", "gif", "heic", "bmp" -> {
                     toThumbJpeg { opts -> BitmapFactory.decodeFile(f.absolutePath, opts) }
                 }
+                "mp4", "mkv", "avi", "mov", "webm", "3gp" -> {
+                    val mmr = MediaMetadataRetriever()
+                    val frame: Bitmap? = try {
+                        mmr.setDataSource(f.absolutePath)
+                        mmr.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            ?: mmr.frameAtTime
+                    } catch (_: Exception) {
+                        null
+                    } finally {
+                        try { mmr.release() } catch (_: Exception) {}
+                    }
+                    if (frame != null) {
+                        val size = 96
+                        val minSide = minOf(frame.width, frame.height).coerceAtLeast(1)
+                        val x = (frame.width - minSide) / 2
+                        val y = (frame.height - minSide) / 2
+                        val cropped = if (frame.width == frame.height) frame else Bitmap.createBitmap(frame, x, y, minSide, minSide)
+                        if (cropped !== frame) frame.recycle()
+                        val scaled = if (cropped.width == size) cropped else Bitmap.createScaledBitmap(cropped, size, size, true)
+                        if (scaled !== cropped) cropped.recycle()
+                        val out = ByteArrayOutputStream()
+                        scaled.compress(Bitmap.CompressFormat.JPEG, 78, out)
+                        scaled.recycle()
+                        out.toByteArray()
+                    } else null
+                }
                 "mp3", "flac", "m4a", "wav", "ogg", "aac", "opus" -> {
                     val mmr = MediaMetadataRetriever()
                     val pic: ByteArray? = try {
