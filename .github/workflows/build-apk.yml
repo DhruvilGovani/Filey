@@ -26,11 +26,6 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Sync index.html into Android assets
-        run: |
-          mkdir -p android/app/src/main/assets
-          cp index.html android/app/src/main/assets/index.html
-
       - name: Build Signed Release APK
         working-directory: android
         run: gradle assembleRelease --no-daemon
@@ -49,8 +44,7 @@ jobs:
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Glimpse v1.0.${{ github.run_number }}
+          tag_name: v2.0.${{ github.run_number }}
+          name: Glimpse v2.0.${{ github.run_number }}
           files: out/Glimpse.apk
           make_latest: true
-          
